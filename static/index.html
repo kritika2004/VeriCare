@@ -1,0 +1,473 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>VeriCare Intelligence</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+      background: #f1f5f9;
+      height: 100vh;
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+    }
+
+    /* ── Header ── */
+    header {
+      background: #1e40af;
+      color: white;
+      padding: 12px 20px;
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      flex-shrink: 0;
+      box-shadow: 0 2px 8px rgba(0,0,0,.25);
+      z-index: 10;
+    }
+    header .logo { font-size: 22px; }
+    header h1 { font-size: 18px; font-weight: 700; letter-spacing: .3px; }
+    header p  { font-size: 12px; opacity: .8; margin-top: 1px; }
+
+    /* ── Emergency Banner ── */
+    #emergency-banner {
+      display: none;
+      background: #dc2626;
+      color: white;
+      text-align: center;
+      padding: 10px 16px;
+      font-weight: 700;
+      font-size: 14px;
+      flex-shrink: 0;
+      animation: pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50%       { opacity: .85; }
+    }
+
+    /* ── Body Layout ── */
+    .app-body {
+      display: flex;
+      flex: 1;
+      overflow: hidden;
+    }
+
+    /* ── Chat Panel ── */
+    .chat-panel {
+      width: 400px;
+      min-width: 340px;
+      display: flex;
+      flex-direction: column;
+      background: white;
+      border-right: 1px solid #e2e8f0;
+    }
+
+    .chat-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 16px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+    }
+
+    .message {
+      display: flex;
+      flex-direction: column;
+      max-width: 92%;
+    }
+    .message.user   { align-self: flex-end; align-items: flex-end; }
+    .message.system { align-self: flex-start; align-items: flex-start; }
+
+    .bubble {
+      padding: 10px 14px;
+      border-radius: 16px;
+      font-size: 14px;
+      line-height: 1.55;
+      white-space: pre-wrap;
+    }
+    .message.user   .bubble { background: #1e40af; color: white; border-bottom-right-radius: 4px; }
+    .message.system .bubble { background: #f1f5f9; color: #1e293b; border-bottom-left-radius: 4px; border: 1px solid #e2e8f0; }
+    .message.system .bubble.emergency { background: #fef2f2; border-color: #fca5a5; }
+
+    .meta { font-size: 11px; color: #94a3b8; margin-top: 4px; padding: 0 4px; }
+
+    /* facility count badge */
+    .count-badge {
+      display: inline-block;
+      margin-top: 6px;
+      background: #dbeafe;
+      color: #1e40af;
+      font-size: 12px;
+      font-weight: 600;
+      padding: 3px 10px;
+      border-radius: 99px;
+    }
+
+    /* typing indicator */
+    .typing .bubble { background: #f1f5f9; border: 1px solid #e2e8f0; padding: 12px 16px; }
+    .dots span {
+      display: inline-block;
+      width: 7px; height: 7px;
+      background: #94a3b8;
+      border-radius: 50%;
+      margin: 0 2px;
+      animation: bounce .9s infinite;
+    }
+    .dots span:nth-child(2) { animation-delay: .15s; }
+    .dots span:nth-child(3) { animation-delay: .3s; }
+    @keyframes bounce {
+      0%, 80%, 100% { transform: translateY(0); }
+      40%            { transform: translateY(-6px); }
+    }
+
+    /* ── Input Area ── */
+    .chat-input {
+      padding: 12px;
+      border-top: 1px solid #e2e8f0;
+      display: flex;
+      gap: 8px;
+      background: white;
+    }
+    .chat-input textarea {
+      flex: 1;
+      border: 1px solid #cbd5e1;
+      border-radius: 10px;
+      padding: 10px 12px;
+      font-size: 14px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      height: 44px;
+      max-height: 120px;
+      transition: border-color .2s;
+    }
+    .chat-input textarea:focus { border-color: #1e40af; }
+    .chat-input button {
+      background: #1e40af;
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 0 16px;
+      cursor: pointer;
+      font-size: 18px;
+      transition: background .2s;
+      flex-shrink: 0;
+    }
+    .chat-input button:hover    { background: #1d3a9e; }
+    .chat-input button:disabled { background: #94a3b8; cursor: not-allowed; }
+
+    /* suggestions */
+    .suggestions {
+      padding: 0 12px 10px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }
+    .suggestion-chip {
+      background: #eff6ff;
+      border: 1px solid #bfdbfe;
+      color: #1e40af;
+      border-radius: 99px;
+      padding: 5px 12px;
+      font-size: 12px;
+      cursor: pointer;
+      transition: background .15s;
+    }
+    .suggestion-chip:hover { background: #dbeafe; }
+
+    /* ── Map Panel ── */
+    .map-panel { flex: 1; position: relative; }
+    #map { width: 100%; height: 100%; }
+
+    /* map legend */
+    .map-legend {
+      position: absolute;
+      bottom: 24px;
+      right: 10px;
+      background: white;
+      border-radius: 8px;
+      padding: 10px 14px;
+      font-size: 12px;
+      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+      z-index: 1000;
+      line-height: 1.8;
+    }
+    .legend-dot {
+      display: inline-block;
+      width: 10px; height: 10px;
+      border-radius: 50%;
+      margin-right: 5px;
+      vertical-align: middle;
+    }
+
+    /* result count overlay */
+    #result-overlay {
+      display: none;
+      position: absolute;
+      top: 10px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: #1e40af;
+      color: white;
+      border-radius: 99px;
+      padding: 6px 16px;
+      font-size: 13px;
+      font-weight: 600;
+      z-index: 1000;
+      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <div class="logo">🏥</div>
+  <div>
+    <h1>VeriCare Intelligence</h1>
+    <p>AI-powered healthcare facility routing for India</p>
+  </div>
+</header>
+
+<div id="emergency-banner">⚠️ LIFE-THREATENING EMERGENCY — CALL 108 IMMEDIATELY</div>
+
+<div class="app-body">
+
+  <!-- Chat -->
+  <div class="chat-panel">
+    <div class="chat-messages" id="messages">
+      <div class="message system">
+        <div class="bubble">
+          Hello! I'm VeriCare Intelligence. Ask me about healthcare facilities across India — by city, specialty, or capability.
+
+Try: <em>"Find hospitals with ICU in Patna"</em> or <em>"How many government hospitals are in Bihar?"</em>
+        </div>
+      </div>
+    </div>
+
+    <div class="suggestions" id="suggestions">
+      <span class="suggestion-chip" onclick="sendSuggestion(this)">Hospitals in Delhi with ICU</span>
+      <span class="suggestion-chip" onclick="sendSuggestion(this)">Cardiology centers in Mumbai</span>
+      <span class="suggestion-chip" onclick="sendSuggestion(this)">Government hospitals in Bihar</span>
+      <span class="suggestion-chip" onclick="sendSuggestion(this)">Maternity hospitals in Lucknow</span>
+    </div>
+
+    <div class="chat-input">
+      <textarea id="input" placeholder="Ask about facilities…" rows="1"
+        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
+      <button id="send-btn" onclick="sendMessage()">➤</button>
+    </div>
+  </div>
+
+  <!-- Map -->
+  <div class="map-panel">
+    <div id="result-overlay"></div>
+    <div id="map"></div>
+    <div class="map-legend">
+      <div><span class="legend-dot" style="background:#dc2626"></span>Emergency</div>
+      <div><span class="legend-dot" style="background:#7c3aed"></span>ICU</div>
+      <div><span class="legend-dot" style="background:#059669"></span>Government</div>
+      <div><span class="legend-dot" style="background:#2563eb"></span>Other</div>
+    </div>
+  </div>
+
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+  // ── Map Setup ──────────────────────────────────────────────
+  const map = L.map('map', { zoomControl: true }).setView([20.5937, 78.9629], 5);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
+    maxZoom: 18,
+  }).addTo(map);
+
+  let markerLayer = L.layerGroup().addTo(map);
+
+  function markerColor(f) {
+    if (f.has_emergency) return '#dc2626';
+    if (f.has_icu)       return '#7c3aed';
+    if (f.type === 'government') return '#059669';
+    return '#2563eb';
+  }
+
+  function updateMap(facilities, mapCfg) {
+    markerLayer.clearLayers();
+
+    if (facilities.length === 0) {
+      map.setView([20.5937, 78.9629], 5);
+      return;
+    }
+
+    facilities.forEach(f => {
+      const color = markerColor(f);
+      const marker = L.circleMarker([f.lat, f.lng], {
+        radius: 8,
+        fillColor: color,
+        color: '#fff',
+        weight: 1.5,
+        fillOpacity: 0.9,
+      });
+
+      const caps = [
+        f.has_emergency ? '🚨 Emergency' : null,
+        f.has_icu       ? '🏥 ICU'       : null,
+        f.has_obg       ? '👶 OB/GYN'    : null,
+        f.has_surgery   ? '🔪 Surgery'   : null,
+      ].filter(Boolean).join(' &nbsp;');
+
+      marker.bindPopup(`
+        <div style="min-width:190px;font-size:13px;line-height:1.6">
+          <div style="font-weight:700;font-size:14px;margin-bottom:4px">${esc(f.name)}</div>
+          <div style="color:#64748b">${esc(f.address)}</div>
+          <div style="margin-top:6px">
+            📞 ${ f.phone ? `<b>${esc(f.phone)}</b>` : '<span style="color:#ef4444">No phone listed</span>' }
+          </div>
+          ${ caps ? `<div style="margin-top:6px;font-size:12px">${caps}</div>` : '' }
+          <div style="margin-top:4px;font-size:11px;color:#94a3b8;text-transform:capitalize">${esc(f.type || 'facility')}</div>
+        </div>
+      `);
+
+      markerLayer.addLayer(marker);
+    });
+
+    // Smooth fly to
+    if (facilities.length === 1) {
+      map.flyTo(mapCfg.center, mapCfg.zoom, { duration: 1.2 });
+    } else {
+      const group = L.featureGroup(markerLayer.getLayers());
+      map.flyToBounds(group.getBounds().pad(0.25), { duration: 1.2, maxZoom: mapCfg.zoom });
+    }
+  }
+
+  function esc(str) {
+    if (!str) return '';
+    return String(str)
+      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+  }
+
+  // ── Chat Logic ─────────────────────────────────────────────
+  const messagesEl  = document.getElementById('messages');
+  const inputEl     = document.getElementById('input');
+  const sendBtn     = document.getElementById('send-btn');
+  const emergencyEl = document.getElementById('emergency-banner');
+  const overlayEl   = document.getElementById('result-overlay');
+
+  function appendMessage(role, text, extra = {}) {
+    const wrap = document.createElement('div');
+    wrap.className = `message ${role}`;
+
+    const bubble = document.createElement('div');
+    bubble.className = 'bubble' + (extra.emergency ? ' emergency' : '');
+    bubble.textContent = text;
+    wrap.appendChild(bubble);
+
+    if (extra.count != null) {
+      const badge = document.createElement('span');
+      badge.className = 'count-badge';
+      badge.textContent = `${extra.count} facilities found`;
+      wrap.appendChild(badge);
+    }
+
+    const meta = document.createElement('div');
+    meta.className = 'meta';
+    meta.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    wrap.appendChild(meta);
+
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return wrap;
+  }
+
+  function addTyping() {
+    const wrap = document.createElement('div');
+    wrap.className = 'message system typing';
+    wrap.innerHTML = '<div class="bubble"><div class="dots"><span></span><span></span><span></span></div></div>';
+    messagesEl.appendChild(wrap);
+    messagesEl.scrollTop = messagesEl.scrollHeight;
+    return wrap;
+  }
+
+  async function sendMessage() {
+    const q = inputEl.value.trim();
+    if (!q) return;
+
+    inputEl.value = '';
+    autoResize(inputEl);
+    sendBtn.disabled = true;
+    document.getElementById('suggestions').style.display = 'none';
+
+    appendMessage('user', q);
+    const typing = addTyping();
+
+    try {
+      const res = await fetch('/chat', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ question: q }),
+      });
+
+      if (!res.ok) {
+        const err = await res.json();
+        throw new Error(err.detail || 'Server error');
+      }
+
+      const data = await res.json();
+      typing.remove();
+
+      // Emergency banner
+      if (data.is_emergency) {
+        emergencyEl.style.display = 'block';
+      } else {
+        emergencyEl.style.display = 'none';
+      }
+
+      appendMessage('system', data.answer, {
+        emergency: data.is_emergency,
+        count: data.facilities.length > 0 ? data.result_count : null,
+      });
+
+      // Update map
+      updateMap(data.facilities, data.map);
+
+      // Map overlay
+      if (data.result_count > 0) {
+        overlayEl.textContent = `${data.result_count} facilities found`;
+        overlayEl.style.display = 'block';
+        setTimeout(() => overlayEl.style.display = 'none', 4000);
+      }
+
+    } catch (err) {
+      typing.remove();
+      appendMessage('system', `Error: ${err.message}`);
+    } finally {
+      sendBtn.disabled = false;
+      inputEl.focus();
+    }
+  }
+
+  function sendSuggestion(el) {
+    inputEl.value = el.textContent;
+    sendMessage();
+  }
+
+  function handleKey(e) {
+    if (e.key === 'Enter' && !e.shiftKey) {
+      e.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function autoResize(el) {
+    el.style.height = '44px';
+    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
+  }
+</script>
+</body>
+</html>
