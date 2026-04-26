@@ -1,5 +1,5 @@
 # VeriCare
-
+Challenge 03: Serving A Nation — Building Agentic Healthcare Maps for 1.4 Billion Lives 
 AI-powered healthcare facility routing and intelligence platform for India. Ask natural language questions to find, compare, and locate healthcare facilities across 29+ states — results appear on an interactive map with trust-scored, validated answers.
 
 **AI and data infrastructure powered by [Databricks](https://databricks.com).**
