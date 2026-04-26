@@ -9,7 +9,8 @@ load_dotenv()
 DATABRICKS_HOST = os.getenv("DATABRICKS_HOST")
 DATABRICKS_TOKEN = os.getenv("DATABRICKS_TOKEN")
 WAREHOUSE_ID = os.getenv("WAREHOUSE_ID")
-LLM_ENDPOINT = os.getenv("LLM_ENDPOINT", "databricks-meta-llama-3-3-70b-instruct")
+LLM_ENDPOINT      = os.getenv("LLM_ENDPOINT", "databricks-meta-llama-3-3-70b-instruct")
+VALIDATE_ENDPOINT = os.getenv("VALIDATE_ENDPOINT", "databricks-meta-llama-3.1-405b-instruct")
 
 
 def _headers():
@@ -106,7 +107,7 @@ RULES:
 - Recommend calling ahead to confirm before traveling"""
 
 
-def call_llm(system: str, user: str, max_tokens: int = 1024) -> str:
+def call_llm(system: str, user: str, max_tokens: int = 1024, endpoint: str | None = None) -> str:
     payload = {
         "messages": [
             {"role": "system", "content": system},
@@ -116,10 +117,10 @@ def call_llm(system: str, user: str, max_tokens: int = 1024) -> str:
         "temperature": 0,
     }
     resp = requests.post(
-        f"{DATABRICKS_HOST}/serving-endpoints/{LLM_ENDPOINT}/invocations",
+        f"{DATABRICKS_HOST}/serving-endpoints/{endpoint or LLM_ENDPOINT}/invocations",
         headers=_headers(),
         json=payload,
-        timeout=60,
+        timeout=90,
     )
     resp.raise_for_status()
     return resp.json()["choices"][0]["message"]["content"].strip()
@@ -207,17 +208,57 @@ def _map_config(facilities: list) -> dict:
     return {"center": center, "zoom": zoom}
 
 
+VALIDATE_SYSTEM = """You are a validation agent for VeriCare — India's healthcare facility database.
+
+Review an AI-generated answer against the actual SQL query results and check for accuracy.
+
+Assess:
+1. Do facility names, phone numbers, and cities match the raw data exactly? (hallucination check)
+2. Is the count or number mentioned in the answer correct?
+3. Does the answer actually address the user's question?
+4. Are any facts invented that are not present in the data?
+
+Trust score guide:
+- 90-100: Fully accurate, all facts match the data, no hallucinations
+- 70-89:  Mostly accurate, minor omissions or slight imprecision
+- 50-69:  Partially accurate, some errors or missing key facts
+- 0-49:   Significant hallucinations or incorrect facts detected
+
+Return ONLY valid JSON — no markdown, no explanation:
+{"trust_score": <integer 0-100>, "is_accurate": <true|false>, "note": "<one sentence>"}"""
+
+
+def _validate(question: str, sql: str, results: list, answer: str) -> dict:
+    context = (
+        f"User question: {question}\n"
+        f"SQL used: {sql}\n"
+        f"Total rows returned: {len(results)}\n"
+        f"Raw data sample (first 5 rows): {json.dumps(results[:5], indent=2)}\n\n"
+        f"AI answer to validate:\n{answer}"
+    )
+    try:
+        raw = call_llm(VALIDATE_SYSTEM, context, max_tokens=256, endpoint=VALIDATE_ENDPOINT)
+        parsed = _parse_llm_json(raw)
+        return {
+            "trust_score": max(0, min(100, int(parsed.get("trust_score", 70)))),
+            "is_accurate": bool(parsed.get("is_accurate", True)),
+            "validation_note": str(parsed.get("note", "")),
+        }
+    except Exception:
+        return {"trust_score": 70, "is_accurate": True, "validation_note": "Validation unavailable."}
+
+
 def process_question(question: str) -> dict:
-    # Step 1: LLM → SQL
+    # Step 1: LLM (70B) → SQL
     raw = call_llm(SQL_SYSTEM, question)
     parsed = _parse_llm_json(raw)
     sql = parsed["sql"]
     is_emergency = bool(parsed.get("is_emergency", False))
 
-    # Step 2: Execute SQL
+    # Step 2: Execute SQL on Databricks
     results = run_sql(sql)
 
-    # Step 3: LLM → natural language answer
+    # Step 3: LLM (70B) → natural language answer
     context = (
         f"User question: {question}\n"
         f"is_emergency: {is_emergency}\n"
@@ -226,6 +267,9 @@ def process_question(question: str) -> dict:
         f"Data (first 20 rows): {json.dumps(results[:20], indent=2)}"
     )
     answer = call_llm(PRESENT_SYSTEM, context, max_tokens=512)
+
+    # Step 4: LLM (405B) → validate answer and assign trust score
+    validation = _validate(question, sql, results, answer)
 
     facilities = _extract_facilities(results)
 
@@ -236,4 +280,6 @@ def process_question(question: str) -> dict:
         "is_emergency": is_emergency,
         "sql_used": sql,
         "result_count": len(results),
+        "trust_score": validation["trust_score"],
+        "validation_note": validation["validation_note"],
     }

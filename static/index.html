@@ -3,471 +3,631 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>VeriCare Intelligence</title>
+  <title>VeriCare</title>
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
   <style>
+    /* ── Reset ───────────────────────────────────────────── */
     *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-      background: #f1f5f9;
-      height: 100vh;
-      display: flex;
-      flex-direction: column;
+    :root {
+      --navy:   #0F172A;
+      --panel:  #1E293B;
+      --border: #334155;
+      --blue:   #1D4ED8;
+      --sky:    #38BDF8;
+      --teal:   #0EA5E9;
+      --coral:  #F43F5E;
+      --slate:  #64748B;
+      --light:  #94A3B8;
+      --green:  #10B981;
+      --amber:  #F59E0B;
+      --purple: #8B5CF6;
+      --text:   #E2E8F0;
+    }
+
+    html, body {
+      height: 100%;
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: var(--navy);
+      color: var(--text);
       overflow: hidden;
     }
 
-    /* ── Header ── */
-    header {
-      background: #1e40af;
-      color: white;
-      padding: 12px 20px;
+    /* ── App shell ───────────────────────────────────────── */
+    #vc-app {
+      display: flex;
+      flex-direction: column;
+      height: 100vh;
+    }
+
+    /* ── Navbar ──────────────────────────────────────────── */
+    #vc-nav {
+      display: flex;
+      align-items: center;
+      gap: 0;
+      height: 54px;
+      background: var(--navy);
+      border-bottom: 1px solid var(--border);
+      padding: 0 20px;
+      flex-shrink: 0;
+      z-index: 50;
+    }
+
+    .vc-logo {
       display: flex;
       align-items: center;
       gap: 10px;
-      flex-shrink: 0;
-      box-shadow: 0 2px 8px rgba(0,0,0,.25);
-      z-index: 10;
+      padding-right: 28px;
+      border-right: 1px solid var(--border);
+      margin-right: 20px;
     }
-    header .logo { font-size: 22px; }
-    header h1 { font-size: 18px; font-weight: 700; letter-spacing: .3px; }
-    header p  { font-size: 12px; opacity: .8; margin-top: 1px; }
-
-    /* ── Emergency Banner ── */
-    #emergency-banner {
-      display: none;
-      background: #dc2626;
-      color: white;
-      text-align: center;
-      padding: 10px 16px;
-      font-weight: 700;
-      font-size: 14px;
-      flex-shrink: 0;
-      animation: pulse 1.5s ease-in-out infinite;
-    }
-    @keyframes pulse {
-      0%, 100% { opacity: 1; }
-      50%       { opacity: .85; }
-    }
-
-    /* ── Body Layout ── */
-    .app-body {
+    .vc-logo-icon {
+      width: 32px;
+      height: 32px;
+      background: linear-gradient(135deg, var(--teal), var(--blue));
+      border-radius: 8px;
       display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 17px;
+      flex-shrink: 0;
+    }
+    .vc-logo-text h1 {
+      font-size: 15px;
+      font-weight: 700;
+      letter-spacing: .3px;
+      color: white;
+    }
+    .vc-logo-text p {
+      font-size: 10.5px;
+      color: var(--slate);
+      margin-top: 1px;
+    }
+
+    .vc-tabs {
+      display: flex;
+      align-items: stretch;
+      height: 100%;
+      gap: 2px;
+    }
+    .vc-tab {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 16px;
+      height: 100%;
+      font-size: 13.5px;
+      font-weight: 500;
+      color: var(--light);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      transition: color .2s, border-color .2s;
+      user-select: none;
+      white-space: nowrap;
+    }
+    .vc-tab:hover { color: var(--text); }
+    .vc-tab.active { color: white; border-bottom-color: var(--sky); }
+    .vc-tab-icon { font-size: 15px; }
+
+    /* ── Emergency banner ────────────────────────────────── */
+    #vc-emergency {
+      display: none;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      background: var(--coral);
+      color: white;
+      padding: 9px 16px;
+      font-size: 13px;
+      font-weight: 700;
+      flex-shrink: 0;
+      animation: vc-pulse 1.5s ease-in-out infinite;
+    }
+    @keyframes vc-pulse { 0%,100% { opacity:1 } 50% { opacity:.82 } }
+
+    /* ── Views ───────────────────────────────────────────── */
+    .vc-view {
       flex: 1;
       overflow: hidden;
+      display: none;
     }
+    #vc-view-pulse { display: flex; } /* default active */
 
-    /* ── Chat Panel ── */
-    .chat-panel {
-      width: 400px;
-      min-width: 340px;
+    /* ══════════════════════════════════════════════════════
+       PULSE VIEW (chat + map)
+    ══════════════════════════════════════════════════════ */
+    #vc-view-pulse { flex-direction: row; }
+
+    /* Chat sidebar */
+    #vc-chat {
+      width: 380px;
+      min-width: 320px;
       display: flex;
       flex-direction: column;
-      background: white;
-      border-right: 1px solid #e2e8f0;
+      background: var(--panel);
+      border-right: 1px solid var(--border);
     }
 
-    .chat-messages {
-      flex: 1;
-      overflow-y: auto;
-      padding: 16px;
-      display: flex;
-      flex-direction: column;
-      gap: 12px;
-    }
-
-    .message {
-      display: flex;
-      flex-direction: column;
-      max-width: 92%;
-    }
-    .message.user   { align-self: flex-end; align-items: flex-end; }
-    .message.system { align-self: flex-start; align-items: flex-start; }
-
-    .bubble {
-      padding: 10px 14px;
-      border-radius: 16px;
-      font-size: 14px;
-      line-height: 1.55;
-      white-space: pre-wrap;
-    }
-    .message.user   .bubble { background: #1e40af; color: white; border-bottom-right-radius: 4px; }
-    .message.system .bubble { background: #f1f5f9; color: #1e293b; border-bottom-left-radius: 4px; border: 1px solid #e2e8f0; }
-    .message.system .bubble.emergency { background: #fef2f2; border-color: #fca5a5; }
-
-    .meta { font-size: 11px; color: #94a3b8; margin-top: 4px; padding: 0 4px; }
-
-    /* facility count badge */
-    .count-badge {
-      display: inline-block;
-      margin-top: 6px;
-      background: #dbeafe;
-      color: #1e40af;
-      font-size: 12px;
-      font-weight: 600;
-      padding: 3px 10px;
-      border-radius: 99px;
-    }
-
-    /* typing indicator */
-    .typing .bubble { background: #f1f5f9; border: 1px solid #e2e8f0; padding: 12px 16px; }
-    .dots span {
-      display: inline-block;
-      width: 7px; height: 7px;
-      background: #94a3b8;
-      border-radius: 50%;
-      margin: 0 2px;
-      animation: bounce .9s infinite;
-    }
-    .dots span:nth-child(2) { animation-delay: .15s; }
-    .dots span:nth-child(3) { animation-delay: .3s; }
-    @keyframes bounce {
-      0%, 80%, 100% { transform: translateY(0); }
-      40%            { transform: translateY(-6px); }
-    }
-
-    /* ── Input Area ── */
-    .chat-input {
-      padding: 12px;
-      border-top: 1px solid #e2e8f0;
-      display: flex;
-      gap: 8px;
-      background: white;
-    }
-    .chat-input textarea {
-      flex: 1;
-      border: 1px solid #cbd5e1;
-      border-radius: 10px;
-      padding: 10px 12px;
-      font-size: 14px;
-      font-family: inherit;
-      resize: none;
-      outline: none;
-      height: 44px;
-      max-height: 120px;
-      transition: border-color .2s;
-    }
-    .chat-input textarea:focus { border-color: #1e40af; }
-    .chat-input button {
-      background: #1e40af;
-      color: white;
-      border: none;
-      border-radius: 10px;
-      padding: 0 16px;
-      cursor: pointer;
-      font-size: 18px;
-      transition: background .2s;
+    #vc-chat-header {
+      padding: 14px 16px 12px;
+      border-bottom: 1px solid var(--border);
       flex-shrink: 0;
     }
-    .chat-input button:hover    { background: #1d3a9e; }
-    .chat-input button:disabled { background: #94a3b8; cursor: not-allowed; }
+    #vc-chat-header .vc-tag {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      font-size: 11px;
+      font-weight: 700;
+      letter-spacing: .8px;
+      text-transform: uppercase;
+      color: var(--sky);
+      margin-bottom: 6px;
+    }
+    #vc-chat-header h2 {
+      font-size: 15px;
+      font-weight: 700;
+      color: white;
+    }
+    #vc-chat-header p {
+      font-size: 12px;
+      color: var(--light);
+      margin-top: 2px;
+      line-height: 1.5;
+    }
 
-    /* suggestions */
-    .suggestions {
-      padding: 0 12px 10px;
+    /* Stats strip */
+    #vc-stats {
+      display: flex;
+      border-bottom: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    .vc-stat {
+      flex: 1;
+      padding: 8px 10px;
+      text-align: center;
+      border-right: 1px solid var(--border);
+    }
+    .vc-stat:last-child { border-right: none; }
+    .vc-stat-val {
+      font-size: 15px;
+      font-weight: 700;
+      color: var(--sky);
+    }
+    .vc-stat-lbl {
+      font-size: 9.5px;
+      color: var(--slate);
+      text-transform: uppercase;
+      letter-spacing: .5px;
+      margin-top: 1px;
+    }
+
+    /* Messages */
+    #vc-messages {
+      flex: 1;
+      overflow-y: auto;
+      padding: 14px;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      scrollbar-width: thin;
+      scrollbar-color: var(--border) transparent;
+    }
+    #vc-messages::-webkit-scrollbar { width: 4px; }
+    #vc-messages::-webkit-scrollbar-thumb { background: var(--border); border-radius: 4px; }
+
+    .vc-msg {
+      display: flex;
+      flex-direction: column;
+      max-width: 93%;
+    }
+    .vc-msg--user  { align-self: flex-end;   align-items: flex-end; }
+    .vc-msg--agent { align-self: flex-start; align-items: flex-start; }
+
+    .vc-bubble {
+      padding: 10px 13px;
+      border-radius: 14px;
+      font-size: 13.5px;
+      line-height: 1.62;
+      white-space: pre-wrap;
+    }
+    .vc-msg--user .vc-bubble {
+      background: var(--blue);
+      color: white;
+      border-bottom-right-radius: 3px;
+    }
+    .vc-msg--agent .vc-bubble {
+      background: #1A2942;
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-bottom-left-radius: 3px;
+    }
+    .vc-bubble--emergency {
+      background: #2D1520 !important;
+      border-color: var(--coral) !important;
+    }
+
+    .vc-msg-meta {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+      padding: 0 3px;
+    }
+    .vc-msg-time { font-size: 10.5px; color: var(--slate); }
+    .vc-pill {
+      background: rgba(56,189,248,.12);
+      border: 1px solid rgba(56,189,248,.28);
+      color: var(--sky);
+      border-radius: 99px;
+      font-size: 11px;
+      font-weight: 600;
+      padding: 2px 9px;
+    }
+
+    /* Typing dots */
+    .vc-dots span {
+      display: inline-block;
+      width: 6px; height: 6px;
+      background: var(--slate);
+      border-radius: 50%;
+      margin: 0 2px;
+      animation: vc-bounce .9s infinite;
+    }
+    .vc-dots span:nth-child(2) { animation-delay: .15s; }
+    .vc-dots span:nth-child(3) { animation-delay: .30s; }
+    @keyframes vc-bounce {
+      0%,80%,100% { transform: translateY(0); }
+      40%          { transform: translateY(-5px); }
+    }
+
+    /* Suggestions */
+    #vc-suggestions {
+      padding: 8px 12px 6px;
       display: flex;
       flex-wrap: wrap;
       gap: 6px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
     }
-    .suggestion-chip {
-      background: #eff6ff;
-      border: 1px solid #bfdbfe;
-      color: #1e40af;
+    .vc-chip {
+      background: rgba(14,165,233,.1);
+      border: 1px solid rgba(14,165,233,.25);
+      color: var(--teal);
       border-radius: 99px;
-      padding: 5px 12px;
+      padding: 5px 11px;
       font-size: 12px;
       cursor: pointer;
       transition: background .15s;
+      white-space: nowrap;
     }
-    .suggestion-chip:hover { background: #dbeafe; }
+    .vc-chip:hover { background: rgba(14,165,233,.2); }
 
-    /* ── Map Panel ── */
-    .map-panel { flex: 1; position: relative; }
-    #map { width: 100%; height: 100%; }
+    /* Input */
+    #vc-input-row {
+      display: flex;
+      gap: 8px;
+      padding: 10px;
+      border-top: 1px solid var(--border);
+      flex-shrink: 0;
+    }
+    #vc-input {
+      flex: 1;
+      background: #12202F;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      color: var(--text);
+      padding: 9px 12px;
+      font-size: 13.5px;
+      font-family: inherit;
+      resize: none;
+      outline: none;
+      height: 42px;
+      max-height: 110px;
+      transition: border-color .2s;
+    }
+    #vc-input::placeholder { color: var(--slate); }
+    #vc-input:focus { border-color: var(--teal); }
+    #vc-send {
+      background: var(--blue);
+      color: white;
+      border: none;
+      border-radius: 10px;
+      padding: 0 15px;
+      cursor: pointer;
+      font-size: 17px;
+      transition: background .2s;
+      flex-shrink: 0;
+    }
+    #vc-send:hover    { background: #1a42c4; }
+    #vc-send:disabled { background: var(--slate); cursor: not-allowed; }
 
-    /* map legend */
-    .map-legend {
+    /* Map panel */
+    #vc-map-panel {
+      flex: 1;
+      position: relative;
+      background: #e8ecf0;
+    }
+    #vc-map { width: 100%; height: 100%; }
+
+    #vc-map-overlay {
       position: absolute;
-      bottom: 24px;
+      top: 12px;
+      left: 50%;
+      transform: translateX(-50%);
+      background: rgba(15,23,42,.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(56,189,248,.3);
+      border-radius: 99px;
+      padding: 6px 18px;
+      font-size: 13px;
+      font-weight: 600;
+      color: var(--sky);
+      z-index: 1000;
+      pointer-events: none;
+      opacity: 0;
+      transition: opacity .35s;
+      white-space: nowrap;
+    }
+    #vc-map-overlay.show { opacity: 1; }
+
+    #vc-map-legend {
+      position: absolute;
+      bottom: 28px;
       right: 10px;
-      background: white;
-      border-radius: 8px;
+      background: rgba(15,23,42,.88);
+      backdrop-filter: blur(8px);
+      border: 1px solid var(--border);
+      border-radius: 10px;
       padding: 10px 14px;
       font-size: 12px;
-      box-shadow: 0 2px 8px rgba(0,0,0,.15);
+      color: var(--light);
+      line-height: 1.95;
       z-index: 1000;
-      line-height: 1.8;
     }
-    .legend-dot {
+    .vc-dot {
       display: inline-block;
-      width: 10px; height: 10px;
+      width: 9px; height: 9px;
       border-radius: 50%;
-      margin-right: 5px;
+      margin-right: 7px;
       vertical-align: middle;
     }
 
-    /* result count overlay */
-    #result-overlay {
-      display: none;
-      position: absolute;
-      top: 10px;
-      left: 50%;
-      transform: translateX(-50%);
-      background: #1e40af;
-      color: white;
+    /* ══════════════════════════════════════════════════════
+       ANALYTICS VIEW
+    ══════════════════════════════════════════════════════ */
+    #vc-view-analytics { flex-direction: column; }
+
+    #vc-analytics-bar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      padding: 10px 20px;
+      border-bottom: 1px solid var(--border);
+      background: var(--panel);
+      flex-shrink: 0;
+    }
+    #vc-analytics-bar h2 { font-size: 14px; font-weight: 600; color: white; }
+    #vc-analytics-bar p  { font-size: 12px; color: var(--light); margin-top: 2px; }
+    .vc-badge {
+      background: rgba(16,185,129,.15);
+      border: 1px solid rgba(16,185,129,.3);
+      color: var(--green);
       border-radius: 99px;
-      padding: 6px 16px;
-      font-size: 13px;
+      font-size: 11px;
       font-weight: 600;
-      z-index: 1000;
-      box-shadow: 0 2px 8px rgba(0,0,0,.2);
+      padding: 4px 12px;
+    }
+    #vc-iframe-wrap { flex: 1; }
+    #vc-iframe-wrap iframe { width: 100%; height: 100%; border: none; display: block; }
+
+    /* ══════════════════════════════════════════════════════
+       Leaflet popup dark overrides
+    ══════════════════════════════════════════════════════ */
+    .leaflet-popup-content-wrapper {
+      background: #1E293B !important;
+      border: 1px solid #334155 !important;
+      color: #E2E8F0 !important;
+      border-radius: 10px !important;
+      box-shadow: 0 8px 32px rgba(0,0,0,.5) !important;
+    }
+    .leaflet-popup-tip       { background: #1E293B !important; }
+    .leaflet-popup-close-button { color: #64748B !important; top: 6px !important; right: 8px !important; }
+    .vc-popup-name { font-weight: 700; font-size: 14px; margin-bottom: 4px; color: white; }
+    .vc-popup-addr { color: #94A3B8; font-size: 12px; line-height: 1.4; }
+    .vc-popup-phone { margin-top: 7px; font-size: 13px; }
+    .vc-popup-phone b { color: #38BDF8; }
+    .vc-no-phone { color: #F43F5E; }
+    .vc-popup-caps { margin-top: 6px; font-size: 12px; color: #10B981; }
+    .vc-popup-type {
+      margin-top: 5px; font-size: 11px;
+      color: #64748B; text-transform: capitalize;
+    }
+    .leaflet-control-zoom a {
+      background: #1E293B !important;
+      color: #94A3B8 !important;
+      border-color: #334155 !important;
+    }
+    .leaflet-control-zoom a:hover {
+      background: #263347 !important;
+      color: white !important;
+    }
+    .leaflet-control-attribution {
+      background: rgba(15,23,42,.7) !important;
+      color: #475569 !important;
+    }
+    .leaflet-control-attribution a { color: #64748B !important; }
+
+    /* ── Markdown inside agent bubbles ── */
+    .vc-bubble--md p            { margin-bottom: 8px; }
+    .vc-bubble--md p:last-child { margin-bottom: 0; }
+    .vc-bubble--md ol,
+    .vc-bubble--md ul           { margin: 6px 0 8px 18px; }
+    .vc-bubble--md li           { margin-bottom: 5px; line-height: 1.6; }
+    .vc-bubble--md strong       { color: white; font-weight: 700; }
+    .vc-bubble--md em           { color: var(--light); font-style: italic; }
+    .vc-bubble--md code         { background: rgba(255,255,255,.08); border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+
+    /* ── Validation strip ── */
+    .vc-validation {
+      display: flex;
+      align-items: flex-start;
+      gap: 6px;
+      margin-top: 5px;
+      padding: 7px 11px;
+      background: rgba(255,255,255,.04);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      font-size: 11.5px;
+      color: var(--light);
+      line-height: 1.5;
+      flex-wrap: wrap;
+    }
+    .vc-val-icon { font-size: 13px; flex-shrink: 0; margin-top: 1px; }
+    .vc-val-text { flex: 1; }
+    .vc-val-text b { color: var(--text); font-weight: 600; }
+    .vc-val-note {
+      display: block;
+      width: 100%;
+      margin-top: 3px;
+      padding-left: 19px;
+      color: var(--slate);
+      font-style: italic;
+      font-size: 11px;
+    }
+
+    /* ── Light map overrides ── */
+    .leaflet-control-zoom a {
+      background: white !important;
+      color: var(--slate) !important;
+      border-color: #cbd5e1 !important;
+    }
+    .leaflet-control-zoom a:hover {
+      background: #f1f5f9 !important;
+      color: var(--navy) !important;
+    }
+    .leaflet-control-attribution {
+      background: rgba(255,255,255,.8) !important;
+      color: #94a3b8 !important;
     }
   </style>
 </head>
 <body>
+<div id="vc-app">
 
-<header>
-  <div class="logo">🏥</div>
-  <div>
-    <h1>VeriCare Intelligence</h1>
-    <p>AI-powered healthcare facility routing for India</p>
+  <!-- ── Navbar ── -->
+  <nav id="vc-nav">
+    <div class="vc-logo">
+      <div class="vc-logo-icon">🏥</div>
+      <div class="vc-logo-text">
+        <h1>VERI CARE</h1>
+        <p>Healthcare Intelligence Platform</p>
+      </div>
+    </div>
+    <div class="vc-tabs">
+      <div class="vc-tab active" data-tab="pulse">
+        <span class="vc-tab-icon">💓</span>
+        Pulse
+      </div>
+      <div class="vc-tab" data-tab="analytics">
+        <span class="vc-tab-icon">📊</span>
+        Analytics
+      </div>
+    </div>
+  </nav>
+
+  <!-- ── Emergency banner ── -->
+  <div id="vc-emergency">
+    🚨 LIFE-THREATENING EMERGENCY — CALL 108 IMMEDIATELY
   </div>
-</header>
 
-<div id="emergency-banner">⚠️ LIFE-THREATENING EMERGENCY — CALL 108 IMMEDIATELY</div>
+  <!-- ══ PULSE VIEW ══ -->
+  <div id="vc-view-pulse" class="vc-view">
 
-<div class="app-body">
+    <!-- Chat sidebar -->
+    <div id="vc-chat">
+      <div id="vc-chat-header">
+        <div class="vc-tag">💓 Pulse · AI Agent</div>
+        <h2>VeriCare Pulse</h2>
+        <p>Ask about any facility in India — by city, state, specialty, or capability</p>
+      </div>
 
-  <!-- Chat -->
-  <div class="chat-panel">
-    <div class="chat-messages" id="messages">
-      <div class="message system">
-        <div class="bubble">
-          Hello! I'm VeriCare Intelligence. Ask me about healthcare facilities across India — by city, specialty, or capability.
-
-Try: <em>"Find hospitals with ICU in Patna"</em> or <em>"How many government hospitals are in Bihar?"</em>
+      <div id="vc-stats">
+        <div class="vc-stat">
+          <div class="vc-stat-val">~10K</div>
+          <div class="vc-stat-lbl">Facilities</div>
         </div>
+        <div class="vc-stat">
+          <div class="vc-stat-val">29+</div>
+          <div class="vc-stat-lbl">States</div>
+        </div>
+        <div class="vc-stat">
+          <div class="vc-stat-val">Llama 3.3</div>
+          <div class="vc-stat-lbl">AI Model</div>
+        </div>
+      </div>
+
+      <div id="vc-messages">
+        <div class="vc-msg vc-msg--agent">
+          <div class="vc-bubble">Hello! I'm VeriCare Pulse — your AI-powered healthcare routing assistant for India.
+
+Ask me to find facilities, compare states, look up specialties, or locate emergency care near you.</div>
+          <div class="vc-msg-meta">
+            <span class="vc-msg-time">now</span>
+          </div>
+        </div>
+      </div>
+
+      <div id="vc-suggestions">
+        <span class="vc-chip">Compare hospitals in Delhi vs Dehradun</span>
+        <span class="vc-chip">Cardiac centers in Delhi</span>
+        <span class="vc-chip">Facilities in Dehradun</span>
+        <span class="vc-chip">Compare Bihar vs Uttar Pradesh hospitals</span>
+        <span class="vc-chip">Emergency hospitals in Mumbai</span>
+      </div>
+
+      <div id="vc-input-row">
+        <textarea id="vc-input" placeholder="Ask about healthcare facilities…" rows="1"></textarea>
+        <button id="vc-send">➤</button>
       </div>
     </div>
 
-    <div class="suggestions" id="suggestions">
-      <span class="suggestion-chip" onclick="sendSuggestion(this)">Hospitals in Delhi with ICU</span>
-      <span class="suggestion-chip" onclick="sendSuggestion(this)">Cardiology centers in Mumbai</span>
-      <span class="suggestion-chip" onclick="sendSuggestion(this)">Government hospitals in Bihar</span>
-      <span class="suggestion-chip" onclick="sendSuggestion(this)">Maternity hospitals in Lucknow</span>
+    <!-- Map panel -->
+    <div id="vc-map-panel">
+      <div id="vc-map-overlay"></div>
+      <div id="vc-map"></div>
+      <div id="vc-map-legend">
+        <div><span class="vc-dot" style="background:#F43F5E"></span>Emergency</div>
+        <div><span class="vc-dot" style="background:#8B5CF6"></span>ICU</div>
+        <div><span class="vc-dot" style="background:#10B981"></span>Government</div>
+        <div><span class="vc-dot" style="background:#38BDF8"></span>Other</div>
+      </div>
     </div>
 
-    <div class="chat-input">
-      <textarea id="input" placeholder="Ask about facilities…" rows="1"
-        onkeydown="handleKey(event)" oninput="autoResize(this)"></textarea>
-      <button id="send-btn" onclick="sendMessage()">➤</button>
-    </div>
   </div>
 
-  <!-- Map -->
-  <div class="map-panel">
-    <div id="result-overlay"></div>
-    <div id="map"></div>
-    <div class="map-legend">
-      <div><span class="legend-dot" style="background:#dc2626"></span>Emergency</div>
-      <div><span class="legend-dot" style="background:#7c3aed"></span>ICU</div>
-      <div><span class="legend-dot" style="background:#059669"></span>Government</div>
-      <div><span class="legend-dot" style="background:#2563eb"></span>Other</div>
+  <!-- ══ ANALYTICS VIEW ══ -->
+  <div id="vc-view-analytics" class="vc-view">
+    <div id="vc-analytics-bar">
+      <div>
+        <h2>Analytics Dashboard</h2>
+        <p>Facility coverage, distribution, and access metrics across India</p>
+      </div>
+      <span class="vc-badge">● Live</span>
+    </div>
+    <div id="vc-iframe-wrap">
+      <iframe
+        src="https://paraschoue.shinyapps.io/VeriCare/"
+        title="VeriCare Analytics"
+        loading="lazy"
+        allow="fullscreen">
+      </iframe>
     </div>
   </div>
 
 </div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-<script>
-  // ── Map Setup ──────────────────────────────────────────────
-  const map = L.map('map', { zoomControl: true }).setView([20.5937, 78.9629], 5);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '© <a href="https://openstreetmap.org">OpenStreetMap</a>',
-    maxZoom: 18,
-  }).addTo(map);
-
-  let markerLayer = L.layerGroup().addTo(map);
-
-  function markerColor(f) {
-    if (f.has_emergency) return '#dc2626';
-    if (f.has_icu)       return '#7c3aed';
-    if (f.type === 'government') return '#059669';
-    return '#2563eb';
-  }
-
-  function updateMap(facilities, mapCfg) {
-    markerLayer.clearLayers();
-
-    if (facilities.length === 0) {
-      map.setView([20.5937, 78.9629], 5);
-      return;
-    }
-
-    facilities.forEach(f => {
-      const color = markerColor(f);
-      const marker = L.circleMarker([f.lat, f.lng], {
-        radius: 8,
-        fillColor: color,
-        color: '#fff',
-        weight: 1.5,
-        fillOpacity: 0.9,
-      });
-
-      const caps = [
-        f.has_emergency ? '🚨 Emergency' : null,
-        f.has_icu       ? '🏥 ICU'       : null,
-        f.has_obg       ? '👶 OB/GYN'    : null,
-        f.has_surgery   ? '🔪 Surgery'   : null,
-      ].filter(Boolean).join(' &nbsp;');
-
-      marker.bindPopup(`
-        <div style="min-width:190px;font-size:13px;line-height:1.6">
-          <div style="font-weight:700;font-size:14px;margin-bottom:4px">${esc(f.name)}</div>
-          <div style="color:#64748b">${esc(f.address)}</div>
-          <div style="margin-top:6px">
-            📞 ${ f.phone ? `<b>${esc(f.phone)}</b>` : '<span style="color:#ef4444">No phone listed</span>' }
-          </div>
-          ${ caps ? `<div style="margin-top:6px;font-size:12px">${caps}</div>` : '' }
-          <div style="margin-top:4px;font-size:11px;color:#94a3b8;text-transform:capitalize">${esc(f.type || 'facility')}</div>
-        </div>
-      `);
-
-      markerLayer.addLayer(marker);
-    });
-
-    // Smooth fly to
-    if (facilities.length === 1) {
-      map.flyTo(mapCfg.center, mapCfg.zoom, { duration: 1.2 });
-    } else {
-      const group = L.featureGroup(markerLayer.getLayers());
-      map.flyToBounds(group.getBounds().pad(0.25), { duration: 1.2, maxZoom: mapCfg.zoom });
-    }
-  }
-
-  function esc(str) {
-    if (!str) return '';
-    return String(str)
-      .replace(/&/g,'&amp;').replace(/</g,'&lt;')
-      .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  }
-
-  // ── Chat Logic ─────────────────────────────────────────────
-  const messagesEl  = document.getElementById('messages');
-  const inputEl     = document.getElementById('input');
-  const sendBtn     = document.getElementById('send-btn');
-  const emergencyEl = document.getElementById('emergency-banner');
-  const overlayEl   = document.getElementById('result-overlay');
-
-  function appendMessage(role, text, extra = {}) {
-    const wrap = document.createElement('div');
-    wrap.className = `message ${role}`;
-
-    const bubble = document.createElement('div');
-    bubble.className = 'bubble' + (extra.emergency ? ' emergency' : '');
-    bubble.textContent = text;
-    wrap.appendChild(bubble);
-
-    if (extra.count != null) {
-      const badge = document.createElement('span');
-      badge.className = 'count-badge';
-      badge.textContent = `${extra.count} facilities found`;
-      wrap.appendChild(badge);
-    }
-
-    const meta = document.createElement('div');
-    meta.className = 'meta';
-    meta.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    wrap.appendChild(meta);
-
-    messagesEl.appendChild(wrap);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-    return wrap;
-  }
-
-  function addTyping() {
-    const wrap = document.createElement('div');
-    wrap.className = 'message system typing';
-    wrap.innerHTML = '<div class="bubble"><div class="dots"><span></span><span></span><span></span></div></div>';
-    messagesEl.appendChild(wrap);
-    messagesEl.scrollTop = messagesEl.scrollHeight;
-    return wrap;
-  }
-
-  async function sendMessage() {
-    const q = inputEl.value.trim();
-    if (!q) return;
-
-    inputEl.value = '';
-    autoResize(inputEl);
-    sendBtn.disabled = true;
-    document.getElementById('suggestions').style.display = 'none';
-
-    appendMessage('user', q);
-    const typing = addTyping();
-
-    try {
-      const res = await fetch('/chat', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ question: q }),
-      });
-
-      if (!res.ok) {
-        const err = await res.json();
-        throw new Error(err.detail || 'Server error');
-      }
-
-      const data = await res.json();
-      typing.remove();
-
-      // Emergency banner
-      if (data.is_emergency) {
-        emergencyEl.style.display = 'block';
-      } else {
-        emergencyEl.style.display = 'none';
-      }
-
-      appendMessage('system', data.answer, {
-        emergency: data.is_emergency,
-        count: data.facilities.length > 0 ? data.result_count : null,
-      });
-
-      // Update map
-      updateMap(data.facilities, data.map);
-
-      // Map overlay
-      if (data.result_count > 0) {
-        overlayEl.textContent = `${data.result_count} facilities found`;
-        overlayEl.style.display = 'block';
-        setTimeout(() => overlayEl.style.display = 'none', 4000);
-      }
-
-    } catch (err) {
-      typing.remove();
-      appendMessage('system', `Error: ${err.message}`);
-    } finally {
-      sendBtn.disabled = false;
-      inputEl.focus();
-    }
-  }
-
-  function sendSuggestion(el) {
-    inputEl.value = el.textContent;
-    sendMessage();
-  }
-
-  function handleKey(e) {
-    if (e.key === 'Enter' && !e.shiftKey) {
-      e.preventDefault();
-      sendMessage();
-    }
-  }
-
-  function autoResize(el) {
-    el.style.height = '44px';
-    el.style.height = Math.min(el.scrollHeight, 120) + 'px';
-  }
-</script>
+<script src="bundle.js"></script>
 </body>
 </html>
